@@ -1,34 +1,25 @@
-// api/parse.js
-// Universal handler compatible with both ESM and CJS on Vercel.
-// Works even if request body is not pre-parsed.
-
+// nlp-service/api/parse.js
 async function handler(req, res) {
     try {
-        // Method guard
-        const method = (req.method || '').toUpperCase();
-        if (method !== 'POST') {
+        if ((req.method || '').toUpperCase() !== 'POST') {
             return res.status(405).json({ error: 'Method Not Allowed' });
         }
-
-        // Bearer auth (optional but recommended)
         const secret = process.env.NLP_SECRET || '';
         const auth = req.headers?.authorization || '';
         if (secret && auth !== `Bearer ${secret}`) {
             return res.status(401).json({ error: 'Unauthorized' });
         }
 
-        // Safe body parse (supports raw stream / string / object)
         let body = req.body;
         if (!body || typeof body === 'string') {
-            const raw =
-                typeof body === 'string'
-                    ? body
-                    : await new Promise((resolve) => {
-                        const chunks = [];
-                        req.on('data', (c) => chunks.push(Buffer.from(c)));
-                        req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-                        req.on('error', () => resolve(''));
-                    });
+            const raw = typeof body === 'string'
+                ? body
+                : await new Promise((resolve) => {
+                    const chunks = [];
+                    req.on('data', (c) => chunks.push(Buffer.from(c)));
+                    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+                    req.on('error', () => resolve(''));
+                });
             try { body = raw ? JSON.parse(raw) : {}; } catch { body = {}; }
         }
 
@@ -52,9 +43,9 @@ async function handler(req, res) {
             rewrite_hint: null,
             embedding: null,
             confidences: { mode: isShop ? 0.8 : 0.6 },
-            explanations: ['stub'],
+            explanations: ['stub']
         });
-    } catch (e) {
+    } catch {
         return res.status(200).json({
             mode: 'CHAT',
             mode_confidence: 0.5,
@@ -72,11 +63,9 @@ async function handler(req, res) {
             rewrite_hint: null,
             embedding: null,
             confidences: { fallback: 1.0 },
-            explanations: ['caught error in stub'],
+            explanations: ['caught error in stub']
         });
     }
 }
-
-// Export for both module systems
 export default handler;
 try { module.exports = handler; } catch { }
