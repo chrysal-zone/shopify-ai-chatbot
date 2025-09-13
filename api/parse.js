@@ -1,30 +1,35 @@
 // api/parse.js
-// Minimal stub parser for connectivity testing only (CommonJS).
+// Universal handler compatible with both ESM and CJS on Vercel.
+// Works even if request body is not pre-parsed.
 
-module.exports = async (req, res) => {
-    // Only allow POST
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method Not Allowed' });
-    }
-
-    // Optional bearer auth
-    const secret = process.env.NLP_SECRET || '';
-    const auth = req.headers.authorization || '';
-    if (secret && auth !== `Bearer ${secret}`) {
-        return res.status(401).json({ error: 'Unauthorized' });
-    }
-
+async function handler(req, res) {
     try {
-        // Ensure body is an object
-        let body = req.body;
-        if (typeof body === 'string') {
-            try { body = JSON.parse(body || '{}'); } catch { body = {}; }
+        // Method guard
+        const method = (req.method || '').toUpperCase();
+        if (method !== 'POST') {
+            return res.status(405).json({ error: 'Method Not Allowed' });
         }
-        if (!body) {
-            const chunks = [];
-            for await (const c of req) chunks.push(Buffer.from(c));
-            const raw = Buffer.concat(chunks).toString('utf8');
-            try { body = JSON.parse(raw || '{}'); } catch { body = {}; }
+
+        // Bearer auth (optional but recommended)
+        const secret = process.env.NLP_SECRET || '';
+        const auth = req.headers?.authorization || '';
+        if (secret && auth !== `Bearer ${secret}`) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        // Safe body parse (supports raw stream / string / object)
+        let body = req.body;
+        if (!body || typeof body === 'string') {
+            const raw =
+                typeof body === 'string'
+                    ? body
+                    : await new Promise((resolve) => {
+                        const chunks = [];
+                        req.on('data', (c) => chunks.push(Buffer.from(c)));
+                        req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+                        req.on('error', () => resolve(''));
+                    });
+            try { body = raw ? JSON.parse(raw) : {}; } catch { body = {}; }
         }
 
         const text = String(body?.text || '');
@@ -50,7 +55,6 @@ module.exports = async (req, res) => {
             explanations: ['stub'],
         });
     } catch (e) {
-        // Safe fallback; your Shopify app will still work
         return res.status(200).json({
             mode: 'CHAT',
             mode_confidence: 0.5,
@@ -68,7 +72,11 @@ module.exports = async (req, res) => {
             rewrite_hint: null,
             embedding: null,
             confidences: { fallback: 1.0 },
-            explanations: ['caught error in stub']
+            explanations: ['caught error in stub'],
         });
     }
-};
+}
+
+// Export for both module systems
+export default handler;
+try { module.exports = handler; } catch { }
